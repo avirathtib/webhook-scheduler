@@ -3,8 +3,8 @@ const axios = require("axios");
 const parsed = require("parse-duration");
 const MongoClient = require("mongodb").MongoClient;
 const uniqid = require("uniqid");
+const formatDistanceToNow = require("date-fns/formatDistanceToNow");
 require("dotenv").config();
-const { id } = require("date-fns/locale");
 
 //initialise app using express
 const app = express();
@@ -32,7 +32,7 @@ app.post("/new", (req, res) => {
     const id = uniqid();
     let date = "";
     if (req.body.date) {
-      date = new Date(req.body.date).toUTCString;
+      date = new Date(req.body.date).toUTCString();
       if (date === "Invalid Date") {
         return res.status("400").send({
           message: "the date entered is invalid",
@@ -41,7 +41,7 @@ app.post("/new", (req, res) => {
     } else if (!isNan(parseInt(req.body.duration))) {
       date = new Date();
       date.setSeconds(date.getSeconds() + parse(req.body.duration) / 1000);
-      date = date.toUTCString;
+      date = date.toUTCString();
     } else {
       return res.status(400).send({
         message: "the date entered is invalid",
@@ -73,8 +73,8 @@ app.post("/new", (req, res) => {
       temporaryData.payload = req.body.payload;
     }
 
-    db.collection("IDs").insertOne({ date: date, ...temporaryData });
-
+    db.collection("IDs").insertOne({ id: id, ...temporaryData });
+    console.log(temporaryData.date);
     return res.status(200).send({
       message: id,
       scheduled: date,
@@ -86,21 +86,46 @@ app.post("/new", (req, res) => {
   }
 });
 
-app.post(`/cancel`, (req, res) => {
+app.post(`/status`, (req, res) => {
   if (req.body.id) {
-    db.collection("IDs").findOne({ id: req.body.id }, function (err, kron) {
-      if (kron === null) {
+    db.collection("IDs").findOne({ id: req.body.id }, function (err, ret) {
+      if (ret === null) {
         return res.status(400).send({
           error: true,
           message:
             "You supplied an invalid ID - it is possible we've already sent a request 😕",
         });
       }
+      ret.timeLeft = formatDistanceToNow(new Date(ret.date));
+      delete ret._id;
+      return res.status(200).send({
+        error: false,
+        message: ret,
+      });
+    });
+  } else {
+    return res.status(400).send({
+      error: true,
+      message: "An ID is required 😕",
+    });
+  }
+});
+
+app.post(`/cancel`, (req, res) => {
+  if (req.body.id) {
+    db.collection("IDs").findOne({ id: req.body.id }, function (err, ret) {
+      if (ret === null) {
+        return res.status(400).send({
+          error: true,
+          message:
+            "You supplied an invalid ID. The original request may have been completed",
+        });
+      }
       db.collection("dates").updateOne(
-        { date: kron.date },
-        { $pull: { IDs: kron.id } }
+        { date: ret.date },
+        { $pull: { IDs: ret.id } }
       );
-      db.collection("IDs").deleteOne({ id: kron.id });
+      db.collection("IDs").deleteOne({ id: ret.id });
       return res.status(200).send({
         error: false,
         message: "Cancelled it 🗑️",
