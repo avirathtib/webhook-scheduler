@@ -2,6 +2,7 @@ const express = require("express");
 const axios = require("axios");
 const parsed = require("parse-duration");
 const MongoClient = require("mongodb").MongoClient;
+const querystring = require("query-string");
 const uniqid = require("uniqid");
 const formatDistanceToNow = require("date-fns/formatDistanceToNow");
 require("dotenv").config();
@@ -24,6 +25,7 @@ client.connect((err, res) => {
   }
   console.log("database connected");
   db = res.db("webhook-scheduler");
+  check();
 });
 
 app.post("/new", (req, res) => {
@@ -38,9 +40,9 @@ app.post("/new", (req, res) => {
           message: "the date entered is invalid",
         });
       }
-    } else if (!isNan(parseInt(req.body.duration))) {
+    } else if (!isNaN(parseInt(req.body.duration))) {
       date = new Date();
-      date.setSeconds(date.getSeconds() + parse(req.body.duration) / 1000);
+      date.setSeconds(date.getSeconds() + parsed(req.body.duration) / 1000);
       date = date.toUTCString();
     } else {
       return res.status(400).send({
@@ -138,5 +140,36 @@ app.post(`/cancel`, (req, res) => {
     });
   }
 });
+
+const check = () => {
+  console.log("lol");
+  let date = new Date("September 16, 2022 20:00:00").toUTCString();
+  console.log(date);
+  db.collection("dates").findOne({ date: date }, function (err, res) {
+    if (res != null) {
+      console.log(res.IDs);
+      res.IDs.forEach((id) => {
+        run(id);
+      });
+    }
+  });
+};
+
+const run = (id) => {
+  console.log(id);
+  db.collection("IDs").findOne({ id: id }, function (err, res) {
+    console.log(res);
+  });
+  // if (res.method == "GET") {
+  //   if (res.payload && !res.url.includes("?")) {
+  //     console.log(res.url);
+  //     res.url += `?${querystring.stringify(res.payload)}`;
+  //   }
+  //   axios.get(res.url);
+  // } else if (res.method == "POST") {
+  //   axios.post(res.url, res.payload);
+  // }
+  // db.collection("IDs").deleteOne({ id: id });
+};
 
 app.listen("8000", () => console.log("you are on server 8000"));
